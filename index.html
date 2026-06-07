@@ -396,30 +396,15 @@ async function fetchLive() {
   }, 25000);
 
   try {
-    // ── PASO 1: channels.list → detecta quién está en vivo ────────────────
-    // Costo: 1 unidad por cada 50 canales (35 canales = 1 unidad)
-    const liveIds = new Set();
+    // ── PASO 1: channels.list → obtener logos de todos los canales ─────────
+    // Costo: 1 unidad por cada 50 canales
     for (let i = 0; i < ids.length; i += 50) {
       const chunk = ids.slice(i, i+50).join(',');
       try {
-        const r    = await fetch(`/api/youtube?endpoint=channels&part=snippet,status&id=${chunk}&maxResults=50`);
+        const r    = await fetch(`/api/youtube?endpoint=channels&part=snippet&id=${chunk}&maxResults=50`);
         const data = await r.json();
-        if (data.error) {
-          if (data.error.code===403||data.error.code===429) {
-            showToast('Cuota agotada · se renueva a la 1am');
-            upd('Cuota agotada · se renueva a la 1am');
-            clearTimeout(timer); spin(false); render(); return;
-          }
-          break;
-        }
+        if (data.error) break;
         (data.items||[]).forEach(item => {
-          // liveBroadcastContent: 'live' | 'upcoming' | 'none'
-          if (item.snippet?.liveBroadcastContent === 'live') {
-            liveIds.add(item.id);
-          } else {
-            liveData[item.id] = { isLive: false };
-          }
-          // Aprovechar y actualizar logos de paso
           const thumb = item.snippet?.thumbnails?.medium?.url
                      || item.snippet?.thumbnails?.default?.url;
           if (thumb) logos[item.id] = thumb;
@@ -427,15 +412,23 @@ async function fetchLive() {
       } catch(e) {}
     }
 
-    // ── PASO 2: search.list SOLO para canales en vivo ─────────────────────
-    // Costo: 100 unidades × canales en vivo (típicamente 3-7)
-    const liveArr = [...liveIds];
-    for (let i = 0; i < liveArr.length; i += 3) {
-      await Promise.all(liveArr.slice(i, i+3).map(async cid => {
+    // ── PASO 2: search.list para detectar canales en vivo ─────────────────
+    // Costo: 100 unidades × número de canales
+    let exceeded = false;
+    for (let i = 0; i < ids.length; i += 3) {
+      if (exceeded) break;
+      await Promise.all(ids.slice(i, i+3).map(async cid => {
         try {
           const r    = await fetch(`/api/youtube?endpoint=search&part=snippet&channelId=${cid}&eventType=live&type=video&maxResults=1`);
           const data = await r.json();
-          if (data.error) { liveData[cid]={isLive:false}; return; }
+          if (data.error) {
+            if (data.error.code===403||data.error.code===429) {
+              exceeded=true;
+              showToast('Cuota agotada · se renueva a la 1am');
+              upd('Cuota agotada · se renueva a la 1am');
+            }
+            liveData[cid]={isLive:false}; return;
+          }
           if (data.items?.length > 0) {
             const it = data.items[0];
             liveData[cid] = { isLive:true, title:it.snippet.title, videoId:it.id.videoId, viewers:null };
