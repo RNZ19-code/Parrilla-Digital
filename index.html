@@ -461,12 +461,12 @@ async function fetchLive() {
     }
 
     // Calcular costo estimado
-    const liveCount  = liveIds.size;
+    const liveCount  = Object.values(liveData).filter(d => d.isLive).length;
     const step1Units = Math.ceil(ids.length / 50);
-    const step2Units = liveCount * 100;
+    const step2Units = ids.length * 100;
     const step3Units = Math.ceil(liveVideos.length / 10);
     const total      = step1Units + step2Units + step3Units;
-    console.log(`Cuota usada: ${total} unidades (${step1Units} channels.list + ${step2Units} search + ${step3Units} videos)`);
+    console.log(`Cuota usada: ${total} unidades · ${liveCount} canales en vivo`);
 
     checkAlerts();
     detectCoverage();
